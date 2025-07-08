@@ -3,10 +3,16 @@ WITH customers AS (
   SELECT
     *
   FROM {{ ref('jaffle_shop', 'customers') }}
-), untitled_sql AS (
+), filter AS (
   SELECT
     *
   FROM customers
+  WHERE
+    LIFETIME_SPEND_PRETAX > 10
+), untitled_sql AS (
+  SELECT
+    *
+  FROM filter
 )
 SELECT
   *
