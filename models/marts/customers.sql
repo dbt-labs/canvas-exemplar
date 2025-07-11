@@ -1,83 +1,87 @@
-with
-
-customers as (
-
-    select 
-        customer_id,
-        customer_name 
-    from 
-        {{ ref('stg_customers') }}
-
-),
-
-orders as (
-
-    select 
-        order_id,
-        location_id,
-        customer_id,
-        subtotal_cents,
-        tax_paid_cents,
-        order_total_cents,
-        subtotal,
-        tax_paid,
-        order_total,
-        ordered_at,
-        order_cost,
-        order_items_subtotal,
-        count_food_items,
-        count_drink_items,
-        count_order_items,
-        is_food_order,
-        is_drink_order,
-        customer_order_number
-    from 
-        {{ ref('orders') }}
-
-),
-
-customer_orders_summary as (
-
-    select
-        orders.customer_id,
-
-        count(distinct orders.order_id) as count_lifetime_orders,
-        count(distinct orders.order_id) > 1 as is_repeat_buyer,
-        min(orders.ordered_at) as first_ordered_at,
-        max(orders.ordered_at) as last_ordered_at,
-        sum(orders.subtotal) as lifetime_spend_pretax,
-        sum(orders.tax_paid) as lifetime_tax_paid,
-        sum(orders.order_total) as lifetime_spend
-
-    from orders
-
-    group by 1
-
-),
-
-joined as (
-
-    select
-        customers.customer_id,
-        customers.customer_name,
-        
-        customer_orders_summary.count_lifetime_orders,
-        customer_orders_summary.first_ordered_at,
-        customer_orders_summary.last_ordered_at,
-        customer_orders_summary.lifetime_spend_pretax,
-        customer_orders_summary.lifetime_tax_paid,
-        customer_orders_summary.lifetime_spend,
-
-        case
-            when customer_orders_summary.is_repeat_buyer then 'returning'
-            else 'new'
-        end as customer_type
-
-    from customers
-
-    left join customer_orders_summary
-        on customers.customer_id = customer_orders_summary.customer_id
-
+WITH stg_customers AS (
+  SELECT
+    *
+  FROM {{ ref('stg_customers') }}
+), orders AS (
+  SELECT
+    ORDER_ID,
+    LOCATION_ID,
+    CUSTOMER_ID,
+    SUBTOTAL_CENTS,
+    TAX_PAID_CENTS,
+    ORDER_TOTAL_CENTS,
+    SUBTOTAL,
+    TAX_PAID,
+    ORDER_TOTAL,
+    ORDERED_AT,
+    ORDER_COST,
+    ORDER_ITEMS_SUBTOTAL,
+    COUNT_FOOD_ITEMS,
+    COUNT_DRINK_ITEMS,
+    COUNT_ORDER_ITEMS,
+    IS_FOOD_ORDER,
+    IS_DRINK_ORDER,
+    CUSTOMER_ORDER_NUMBER
+  FROM {{ ref('orders') }}
+), rename_1 AS (
+  SELECT
+    CUSTOMER_ID AS CUSTOMERS_CUSTOMER_ID,
+    CUSTOMER_NAME
+  FROM stg_customers
+), formula_1 AS (
+  SELECT
+    *,
+    COUNT(DISTINCT ORDER_ID) > 1 AS IS_REPEAT_BUYER
+  FROM orders
+), aggregate_1 AS (
+  SELECT
+    CUSTOMER_ID,
+    COUNT(DISTINCT ORDER_ID) AS COUNT_LIFETIME_ORDERS,
+    MIN(ORDERED_AT) AS FIRST_ORDERED_AT,
+    MAX(ORDERED_AT) AS LAST_ORDERED_AT,
+    SUM(SUBTOTAL) AS LIFETIME_SPEND_PRETAX
+  FROM formula_1
+  GROUP BY
+    CUSTOMER_ID
+), rename_2 AS (
+  SELECT
+    CUSTOMER_ID AS CUSTOMER_ORDERS_SUMMARY_CUSTOMER_ID,
+    COUNT_LIFETIME_ORDERS,
+    IS_REPEAT_BUYER,
+    FIRST_ORDERED_AT,
+    LAST_ORDERED_AT,
+    LIFETIME_SPEND_PRETAX,
+    LIFETIME_TAX_PAID,
+    LIFETIME_SPEND
+  FROM aggregate_1
+), join_1 AS (
+  SELECT
+    *
+  FROM rename_1
+  LEFT JOIN rename_2
+    ON rename_1.CUSTOMERS_CUSTOMER_ID = rename_2.CUSTOMER_ORDERS_SUMMARY_CUSTOMER_ID
+), formula_2 AS (
+  SELECT
+    *,
+    CASE WHEN IS_REPEAT_BUYER THEN 'returning' ELSE 'new' END AS CUSTOMER_TYPE
+  FROM join_1
+), rename_3 AS (
+  SELECT
+    CUSTOMERS_CUSTOMER_ID AS CUSTOMER_ID,
+    CUSTOMER_NAME,
+    COUNT_LIFETIME_ORDERS,
+    FIRST_ORDERED_AT,
+    LAST_ORDERED_AT,
+    LIFETIME_SPEND_PRETAX,
+    LIFETIME_TAX_PAID,
+    LIFETIME_SPEND,
+    CUSTOMER_TYPE
+  FROM formula_2
+), customers AS (
+  SELECT
+    *
+  FROM rename_3
 )
-
-select * from joined
+SELECT
+  *
+FROM customers
